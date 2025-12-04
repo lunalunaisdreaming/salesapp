@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飾品銷售記錄 (自動計算修復版)</title>
+    
+    <!-- PWA / Mobile App Look Configuration -->
+    <meta name="theme-color" content="#9333ea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="飾品記賬">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/9333ea/ffffff?text=A">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Tailwind Config for aesthetics and font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#9333ea', // Violet-600
+                        'secondary': '#f97316', // Orange-600
+                        'new-customer': '#10b981', // Emerald-500
+                        'returning-customer': '#3b82f6', // Blue-500
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        /* Hide scrollbars for a cleaner mobile app look */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
+        }
+        /* Custom styles for the required X button position */
+        .item-card-grid {
+            grid-template-columns: 1fr auto;
+            align-items: center;
+        }
+@media (max-width: 900px) { 
+img { 
+   max-width: 100%;
+   height: auto;
+}
+
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+td, th {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+}	
+
+
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans antialiased">
+    <div class="max-w-4xl mx-auto p-4 md:p-6 pb-20">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-extrabold text-primary">飾品銷售記錄 App</h1>
+            <p class="text-gray-600">快速紀錄市集交易，實時分析客戶類型銷售額。</p>
+        </header>
+
+        <!-- Loading & Error Message Area -->
+        <div id="status-messages" class="mb-4 text-center">
+            <!-- Auth status and error messages will appear here -->
+        </div>
+
+        <!-- 1. 銷售記錄表單 -->
+        <section class="bg-white p-4 md:p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-primary">新增交易</h2>
+            <form id="record-form">
+                <div class="space-y-4">
+                    
+                    <!-- Market Info -->
+                    <div>
+                        <label for="market-name" class="block text-sm font-medium text-gray-700">市集名稱 (自動預設上次使用)</label>
+                        <input type="text" id="market-name" list="market-suggestions" placeholder="例如：西九龍市集"
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                        <datalist id="market-suggestions"></datalist>
+                    </div>
+
+                    <!-- Customer Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="customer-name" class="block text-sm font-medium text-gray-700">客人名字</label>
+                            <input type="text" id="customer-name" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                        </div>
+                        <div>
+                            <label for="customer-trait" class="block text-sm font-medium text-gray-700">客人特徵</label>
+                            <input type="text" id="customer-trait" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+
+                    <!-- Customer Classification -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="customer-type" class="block text-sm font-medium text-gray-700">客人分類</label>
+                            <select id="customer-type" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                                <option value="新客">新客</option>
+                                <option value="熟客">熟客</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="customer-origin" class="block text-sm font-medium text-gray-700">顧客來源</label>
+                            <select id="customer-origin" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                                <option value="本地客人">本地客人</option>
+                                <option value="遊客">遊客</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Item List Container -->
+                    <h3 class="text-lg font-semibold pt-2 text-gray-800">購買飾物清單</h3>
+                    <div id="items-container" class="space-y-3">
+                        <!-- Items will be dynamically added here -->
+                    </div>
+
+                    <!-- Add Item Button -->
+                    <button type="button" id="add-item-btn" class="w-full bg-secondary text-white font-bold py-2 px-4 rounded-lg shadow hover:bg-orange-700 transition duration-150">
+                        + 新增商品
+                    </button>
+                    
+                    <hr class="mt-4 border-gray-200">
+
+                    <!-- Financials -->
+                    <div class="grid grid-cols-2 gap-4 items-center">
+                        <div class="col-span-1">
+                            <label for="manual-discount" class="block text-sm font-medium text-gray-700">額外金額折扣 (HKD)</label>
+                            <input type="number" id="manual-discount" value="0" min="0" step="1"
+                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                        </div>
+                        <div class="col-span-1 text-right">
+                            <label class="block text-sm font-medium text-gray-700">總交易金額</label>
+                            <p id="total-price-display" class="mt-1 text-2xl font-extrabold text-green-600">0.00 HKD</p>
+                            <input type="hidden" id="calculated-total">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="payment-method" class="block text-sm font-medium text-gray-700">付款方法</label>
+                        <select id="payment-method" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                            <option value="現金">現金</option>
+                            <option value="PayMe">PayMe</option>
+                            <option value="FPS">FPS / 轉數快</option>
+                            <option value="信用卡/其他">信用卡/其他</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg mt-6 shadow-lg hover:bg-violet-700 transition duration-150">
+                    紀錄銷售
+                </button>
+            </form>
+        </section>
+
+        <!-- 2. 數據分析與篩選 -->
+        <section class="bg-white p-4 md:p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-primary">交易數據分析</h2>
+
+            <!-- Sales Summary -->
+            <div class="grid grid-cols-2 gap-4 text-center mb-6">
+                <div class="p-3 bg-indigo-50 rounded-lg">
+                    <p class="text-xs font-medium text-indigo-600">總交易次數 (篩選後)</p>
+                    <p id="transaction-count" class="text-2xl font-bold text-indigo-800">0</p>
+                </div>
+                <div class="p-3 bg-green-50 rounded-lg">
+                    <p class="text-xs font-medium text-green-600">總銷售額 (篩選後)</p>
+                    <p id="total-sales-amount" class="text-2xl font-bold text-green-800">0.00 HKD</p>
+                </div>
+            </div>
+
+            <!-- Pie Chart -->
+            <div class="mb-6 p-4 border rounded-lg">
+                <h3 class="text-lg font-semibold mb-2 text-gray-800">新客 / 熟客 銷售額佔比</h3>
+                <canvas id="salesPieChart"></canvas>
+                <p id="chart-status" class="text-center text-sm font-medium mt-2 text-gray-600">數據將於加載後顯示。</p>
+            </div>
+            
+            <!-- Filter Controls -->
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">交易紀錄篩選</h3>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Date Range Filter -->
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">交易日期範圍</label>
+                        <div class="flex space-x-2 mt-1">
+                            <input type="date" id="filter-start-date" class="w-1/2 rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                            <span class="p-2 text-gray-500">至</span>
+                            <input type="date" id="filter-end-date" class="w-1/2 rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Market Filter -->
+                    <div>
+                        <label for="filter-market" class="block text-sm font-medium text-gray-700">市集名稱</label>
+                        <select id="filter-market" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                            <option value="">全部</option>
+                        </select>
+                    </div>
+                    <!-- Customer Type Filter -->
+                    <div>
+                        <label for="filter-type" class="block text-sm font-medium text-gray-700">客人分類</label>
+                        <select id="filter-type" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                            <option value="">全部</option>
+                            <option value="新客">新客</option>
+                            <option value="熟客">熟客</option>
+                        </select>
+                    </div>
+                    <!-- Customer Origin Filter -->
+                    <div>
+                        <label for="filter-origin" class="block text-sm font-medium text-gray-700">顧客來源</label>
+                        <select id="filter-origin" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                            <option value="">全部</option>
+                            <option value="本地客人">本地客人</option>
+                            <option value="遊客">遊客</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Item Attribute Filters -->
+                <h4 class="text-md font-semibold mt-4 text-gray-800 border-t pt-3">商品屬性篩選</h4>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="filter-item-series" class="block text-sm font-medium text-gray-700">飾物系列</label>
+                        <select id="filter-item-series" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-item-description" class="block text-sm font-medium text-gray-700">飾物描述</label>
+                        <select id="filter-item-description" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-item-type" class="block text-sm font-medium text-gray-700">飾物類型</label>
+                        <select id="filter-item-type" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-item-metal" class="block text-sm font-medium text-gray-700">金屬</label>
+                        <select id="filter-item-metal" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-item-material" class="block text-sm font-medium text-gray-700">材料</label>
+                        <select id="filter-item-material" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                    <div>
+                        <label for="filter-item-color" class="block text-sm font-medium text-gray-700">顏色</label>
+                        <select id="filter-item-color" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary"><option value="">全部</option></select>
+                    </div>
+                </div>
+                
+                <button type="button" id="clear-filters-button" class="w-full bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg shadow hover:bg-gray-300 transition duration-150">
+                    清除所有篩選
+                </button>
+            </div>
+        </section>
+
+        <!-- 3. 歷史交易記錄 -->
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-primary">歷史交易記錄</h2>
+            <div id="transactions-list" class="space-y-4">
+                <!-- Transactions will be rendered here -->
+            </div>
+        </section>
+
+        <!-- Edit Modal -->
+        <div id="edit-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
+                <div class="p-6">
+                    <h3 class="text-2xl font-bold mb-4 text-primary">編輯交易紀錄</h3>
+                    <form id="edit-form">
+                        <input type="hidden" id="edit-transaction-id">
+                        
+                        <div class="space-y-4">
+                            <!-- Market Info -->
+                            <div>
+                                <label for="edit-market-name" class="block text-sm font-medium text-gray-700">市集名稱</label>
+                                <input type="text" id="edit-market-name" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                            </div>
+
+                            <!-- Customer Info -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="edit-customer-name" class="block text-sm font-medium text-gray-700">客人名字</label>
+                                    <input type="text" id="edit-customer-name" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                </div>
+                                <div>
+                                    <label for="edit-customer-trait" class="block text-sm font-medium text-gray-700">客人特徵</label>
+                                    <input type="text" id="edit-customer-trait" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                </div>
+                            </div>
+                            
+                            <!-- Customer Classification -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="edit-customer-type" class="block text-sm font-medium text-gray-700">客人分類</label>
+                                    <select id="edit-customer-type" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                        <option value="新客">新客</option>
+                                        <option value="熟客">熟客</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="edit-customer-origin" class="block text-sm font-medium text-gray-700">顧客來源</label>
+                                    <select id="edit-customer-origin" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                        <option value="本地客人">本地客人</option>
+                                        <option value="遊客">遊客</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <hr class="border-gray-200">
+
+                            <!-- Edit Items Container -->
+                            <h4 class="text-md font-semibold pt-2 text-gray-800">編輯購買飾物清單</h4>
+                            <div id="edit-items-container" class="space-y-3">
+                                <!-- Existing items will be loaded here for editing -->
+                            </div>
+                            
+                            <!-- Add Item Button in Edit Modal -->
+                            <button type="button" id="edit-add-item-btn" class="w-full bg-indigo-200 text-indigo-700 font-bold py-2 px-4 rounded-lg shadow hover:bg-indigo-300 transition duration-150">
+                                + 新增商品
+                            </button>
+
+                            <hr class="border-gray-200">
+
+                            <!-- Financials -->
+                            <div class="grid grid-cols-2 gap-4 items-center">
+                                <div class="col-span-1">
+                                    <label for="edit-manual-discount" class="block text-sm font-medium text-gray-700">額外金額折扣 (HKD)</label>
+                                    <input type="number" id="edit-manual-discount" min="0" step="1"
+                                        class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                </div>
+                                <div class="col-span-1 text-right">
+                                    <label class="block text-sm font-medium text-gray-700">總交易金額</label>
+                                    <p id="edit-total-price-display" class="mt-1 text-2xl font-extrabold text-green-600">0.00 HKD</p>
+                                    <input type="hidden" id="edit-calculated-total">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="edit-payment-method" class="block text-sm font-medium text-gray-700">付款方法</label>
+                                <select id="edit-payment-method" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border">
+                                    <option value="現金">現金</option>
+                                    <option value="PayMe">PayMe</option>
+                                    <option value="FPS">FPS / 轉數快</option>
+                                    <option value="信用卡/其他">信用卡/其他</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-4 mt-6">
+                            <button type="button" onclick="closeEditModal()" class="bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-400 transition duration-150">
+                                取消
+                            </button>
+                            <button type="submit" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-150">
+                                儲存變更
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- START OF JAVASCRIPT MODULE -->
+    <script type="module">
+        // Firebase Imports - DO NOT EDIT THE IMPORT PATHS
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase and App State Variables
+        let app, db, auth, userId = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; 
+        let transactionsData = [];
+        let pieChart = null;
+        let lastMarketName = '';
+        let itemDatalists = {}; 
+
+        // DOM Element References (Main Form)
+        const FORM = document.getElementById('record-form');
+        const ITEMS_CONTAINER = document.getElementById('items-container');
+        const ADD_ITEM_BTN = document.getElementById('add-item-btn');
+        const TOTAL_PRICE_DISPLAY = document.getElementById('total-price-display');
+        const CALCULATED_TOTAL = document.getElementById('calculated-total');
+        const MANUAL_DISCOUNT = document.getElementById('manual-discount');
+        const TRANSACTIONS_LIST = document.getElementById('transactions-list');
+        const MARKET_NAME_INPUT = document.getElementById('market-name');
+        const STATUS_MESSAGES = document.getElementById('status-messages');
+        const CUSTOMER_NAME_INPUT = document.getElementById('customer-name');
+        const CUSTOMER_TRAIT_INPUT = document.getElementById('customer-trait');
+        const CUSTOMER_TYPE_INPUT = document.getElementById('customer-type');
+        const CUSTOMER_ORIGIN_INPUT = document.getElementById('customer-origin');
+        const PAYMENT_METHOD_INPUT = document.getElementById('payment-method');
+
+        // DOM Element References (Filters and Summary)
+        const TRANSACTION_COUNT_DISPLAY = document.getElementById('transaction-count');
+        const TOTAL_SALES_AMOUNT_DISPLAY = document.getElementById('total-sales-amount');
+        const SALES_PIE_CHART_CONTEXT = document.getElementById('salesPieChart').getContext('2d');
+        const CHART_STATUS = document.getElementById('chart-status');
+        const CLEAR_FILTERS_BUTTON = document.getElementById('clear-filters-button');
+
+        // Filter DOM elements
+        const FILTER_MARKET = document.getElementById('filter-market');
+        const FILTER_TYPE = document.getElementById('filter-type');
+        const FILTER_ORIGIN = document.getElementById('filter-origin');
+        const FILTER_START_DATE = document.getElementById('filter-start-date');
+        const FILTER_END_DATE = document.getElementById('filter-end-date');
+        
+        // Item Filter DOM elements
+        const FILTER_ITEM_SERIES = document.getElementById('filter-item-series');
+        const FILTER_ITEM_DESCRIPTION = document.getElementById('filter-item-description');
+        const FILTER_ITEM_TYPE = document.getElementById('filter-item-type');
+        const FILTER_ITEM_METAL = document.getElementById('filter-item-metal');
+        const FILTER_ITEM_MATERIAL = document.getElementById('filter-item-material');
+        const FILTER_ITEM_COLOR = document.getElementById('filter-item-color');
+        
+        // Edit Modal DOM elements
+        const EDIT_MODAL = document.getElementById('edit-modal');
+        const EDIT_FORM = document.getElementById('edit-form');
+        const EDIT_TRANSACTION_ID = document.getElementById('edit-transaction-id');
+        const EDIT_ITEMS_CONTAINER = document.getElementById('edit-items-container');
+        const EDIT_ADD_ITEM_BTN = document.getElementById('edit-add-item-btn');
+        const EDIT_TOTAL_PRICE_DISPLAY = document.getElementById('edit-total-price-display');
+        const EDIT_MANUAL_DISCOUNT = document.getElementById('edit-manual-discount');
+
+        // Datalist DOM elements
+        const MARKET_DATALIST = document.getElementById('market-suggestions');
+        const SERIES_DATALIST = document.createElement('datalist');
+        SERIES_DATALIST.id = 'series-suggestions';
+        document.body.appendChild(SERIES_DATALIST);
+        const DESCRIPTION_DATALIST = document.createElement('datalist');
+        DESCRIPTION_DATALIST.id = 'description-suggestions';
+        document.body.appendChild(DESCRIPTION_DATALIST);
+        const TYPE_DATALIST = document.createElement('datalist');
+        TYPE_DATALIST.id = 'type-suggestions';
+        document.body.appendChild(TYPE_DATALIST);
+        const METAL_DATALIST = document.createElement('datalist');
+        METAL_DATALIST.id = 'metal-suggestions';
+        document.body.appendChild(METAL_DATALIST);
+        const MATERIAL_DATALIST = document.createElement('datalist');
+        MATERIAL_DATALIST.id = 'material-suggestions';
+        document.body.appendChild(MATERIAL_DATALIST);
+        const COLOR_DATALIST = document.createElement('datalist');
+        COLOR_DATALIST.id = 'color-suggestions';
+        document.body.appendChild(COLOR_DATALIST);
+
+        // --- Utility Functions ---
+
+        // Helper to format currency (assuming HKD)
+        const formatCurrency = (amount) => {
+            if (typeof amount !== 'number') return 'N/A';
+            return amount.toFixed(2);
+        };
+
+        // Helper for date formatting
+        const formatDate = (timestamp) => {
+            if (!timestamp) return 'N/A';
+            let date;
+            if (timestamp.toDate) { // Firestore Timestamp
+                date = timestamp.toDate();
+            } else if (timestamp instanceof Date) { // JavaScript Date
+                date = timestamp;
+            } else if (typeof timestamp === 'number') { // Milliseconds
+                date = new Date(timestamp);
+            } else {
+                return 'N/A';
+            }
+            return date.toLocaleDateString('zh-HK', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        };
+
+        // Function to safely show messages
+        function showStatus(message, isError = false) {
+            STATUS_MESSAGES.innerHTML = `<div class="p-3 rounded-lg text-sm font-semibold ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}">${message}</div>`;
+        }
+        
+        // --- Core Calculation Logic (Refactored for robustness) ---
+        
+        // **REFACTORED:** Calculate the grand total for the entire transaction, 
+        // and simultaneously update all individual item prices. This ensures synchronization.
+        function calculateGrandTotal(container) {
+            let subtotal = 0;
+            const itemCards = container.querySelectorAll('.item-card');
+            
+            itemCards.forEach(card => {
+                const unitPriceInput = card.querySelector('.item-unit-price');
+                const discountInput = card.querySelector('.item-discount-percent');
+                const calculatedPriceDisplay = card.querySelector('.item-price-display');
+                const calculatedPriceHidden = card.querySelector('.item-price-calculated');
+                
+                // Get values and parse them safely
+                const price = parseFloat(unitPriceInput?.value) || 0;
+                const discount = parseFloat(discountInput?.value) || 0;
+                
+                // Calculate new item price
+                const newPrice = price > 0 ? price * (1 - Math.max(0, Math.min(100, discount)) / 100) : 0;
+                
+                // Update item display and hidden input
+                if (calculatedPriceDisplay) calculatedPriceDisplay.textContent = formatCurrency(newPrice);
+                if (calculatedPriceHidden) calculatedPriceHidden.value = newPrice.toFixed(2);
+                
+                // Add to subtotal
+                subtotal += newPrice;
+            });
+
+            // Determine which manual discount and display elements to use (main form or edit modal)
+            const manualDiscountInput = container === ITEMS_CONTAINER ? MANUAL_DISCOUNT : EDIT_MANUAL_DISCOUNT;
+            const displayElement = container === ITEMS_CONTAINER ? TOTAL_PRICE_DISPLAY : EDIT_TOTAL_PRICE_DISPLAY;
+            const hiddenTotalInput = container === ITEMS_CONTAINER ? CALCULATED_TOTAL : document.getElementById('edit-calculated-total');
+
+            const manualDiscount = parseFloat(manualDiscountInput?.value) || 0;
+            
+            let finalTotal = Math.max(0, subtotal - manualDiscount);
+
+            displayElement.textContent = `${formatCurrency(finalTotal)} HKD`;
+            hiddenTotalInput.value = finalTotal.toFixed(2);
+        }
+
+        // --- Core Application Functions ---
+        
+        // Function to create and render an item card HTML
+        function createItemCard(item, container, isEdit = false) {
+            // Use a temporary unique ID for new cards
+            const id = isEdit ? item.tempId || Date.now() : Date.now(); 
+            const itemIdPrefix = isEdit ? 'edit-item' : 'item';
+
+            // Ensure values are empty string if 0 for cleaner UI
+            const unitPriceValue = item?.unitPrice ? String(item.unitPrice) : '';
+            const discountPercentValue = item?.discountPercent ? String(item.discountPercent) : '';
+            
+            // Calculate initial price (will be updated immediately by calculateGrandTotal)
+            const initialItemPrice = (item?.unitPrice || 0) * (1 - (item?.discountPercent || 0) / 100);
+
+            const itemCard = document.createElement('div');
+            itemCard.className = 'item-card bg-gray-50 p-3 rounded-lg border border-gray-200';
+            itemCard.dataset.id = id;
+            itemCard.innerHTML = `
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-3 items-start">
+                        <!-- Item Series -->
+                        <div>
+                            <label for="${itemIdPrefix}-series-${id}" class="block text-xs font-medium text-gray-700">飾物系列</label>
+                            <input type="text" id="${itemIdPrefix}-series-${id}" list="series-suggestions" placeholder="項鍊/耳環" value="${item?.series || ''}"
+                                class="item-series mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                        <!-- Item Description -->
+                        <div class="relative">
+                            <label for="${itemIdPrefix}-description-${id}" class="block text-xs font-medium text-gray-700">飾物描述</label>
+                            <input type="text" id="${itemIdPrefix}-description-${id}" list="description-suggestions" placeholder="藍色貓眼石" value="${item?.description || ''}"
+                                class="item-description mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 pr-8 border focus:ring-primary focus:border-primary">
+                            
+                            <!-- Delete Button (X) -->
+                            <button type="button" class="absolute right-0 top-0 mt-5 mr-1 text-red-500 hover:text-red-700 text-lg font-bold p-1 leading-none remove-item-btn" 
+                                data-id="${id}" data-container="${isEdit ? 'edit' : 'main'}" aria-label="刪除商品">
+                                &times;
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Item Type -->
+                        <div>
+                            <label for="${itemIdPrefix}-type-${id}" class="block text-xs font-medium text-gray-700">飾物類型</label>
+                            <input type="text" id="${itemIdPrefix}-type-${id}" list="type-suggestions" placeholder="戒指/手鐲" value="${item?.type || ''}"
+                                class="item-type mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                        <!-- Item Color -->
+                        <div>
+                            <label for="${itemIdPrefix}-color-${id}" class="block text-xs font-medium text-gray-700">顏色</label>
+                            <input type="text" id="${itemIdPrefix}-color-${id}" list="color-suggestions" placeholder="藍/金" value="${item?.color || ''}"
+                                class="item-color mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Item Metal -->
+                        <div>
+                            <label for="${itemIdPrefix}-metal-${id}" class="block text-xs font-medium text-gray-700">金屬</label>
+                            <input type="text" id="${itemIdPrefix}-metal-${id}" list="metal-suggestions" placeholder="925銀/黃銅" value="${item?.metal || ''}"
+                                class="item-metal mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                        <!-- Item Material -->
+                        <div>
+                            <label for="${itemIdPrefix}-material-${id}" class="block text-xs font-medium text-gray-700">材料</label>
+                            <input type="text" id="${itemIdPrefix}-material-${id}" list="material-suggestions" placeholder="珍珠/瑪瑙" value="${item?.material || ''}"
+                                class="item-material mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3 bg-white p-2 rounded-md border">
+                        <!-- Unit Price -->
+                        <div>
+                            <label for="${itemIdPrefix}-unit-price-${id}" class="block text-xs font-medium text-gray-700">單價 (HKD)</label>
+                            <input type="number" id="${itemIdPrefix}-unit-price-${id}" value="${unitPriceValue}" min="0" step="1"
+                                class="item-unit-price mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 text-sm border focus:ring-secondary focus:border-secondary">
+                        </div>
+                        <!-- Discount -->
+                        <div>
+                            <label for="${itemIdPrefix}-discount-${id}" class="block text-xs font-medium text-gray-700">折扣 (%)</label>
+                            <input type="number" id="${itemIdPrefix}-discount-${id}" value="${discountPercentValue}" min="0" max="100" step="1"
+                                class="item-discount-percent mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 text-sm border focus:ring-secondary focus:border-secondary">
+                        </div>
+                        <!-- Calculated Price -->
+                        <div class="text-right">
+                            <label class="block text-xs font-medium text-gray-700">小計</label>
+                            <p class="mt-1 text-base font-bold text-indigo-600 item-price-display">${formatCurrency(initialItemPrice)}</p>
+                            <input type="hidden" class="item-price-calculated" value="${initialItemPrice.toFixed(2)}">
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(itemCard);
+            
+            // Add event listeners for instant calculation (now centralized in calculateGrandTotal)
+            const unitPriceInput = itemCard.querySelector('.item-unit-price');
+            const discountInput = itemCard.querySelector('.item-discount-percent');
+
+            // Listeners now directly trigger the full grand total calculation
+            unitPriceInput.addEventListener('input', () => calculateGrandTotal(container));
+            discountInput.addEventListener('input', () => calculateGrandTotal(container));
+
+            // Listener for the small 'X' button
+            itemCard.querySelector('.remove-item-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                const containerType = e.currentTarget.dataset.container;
+                itemCard.remove();
+                
+                // Recalculate total for the correct container
+                const targetContainer = containerType === 'main' ? ITEMS_CONTAINER : EDIT_ITEMS_CONTAINER;
+                calculateGrandTotal(targetContainer);
+            });
+
+            return itemCard;
+        }
+
+        // --- Datalist Management ---
+        
+        async function loadDatalistData() {
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'datalists', 'unique_values');
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    itemDatalists = docSnap.data();
+                    
+                    updateDatalist(MARKET_DATALIST, itemDatalists.markets);
+                    updateDatalist(SERIES_DATALIST, itemDatalists.series);
+                    updateDatalist(DESCRIPTION_DATALIST, itemDatalists.descriptions);
+                    updateDatalist(TYPE_DATALIST, itemDatalists.types);
+                    updateDatalist(METAL_DATALIST, itemDatalists.metals);
+                    updateDatalist(MATERIAL_DATALIST, itemDatalists.materials);
+                    updateDatalist(COLOR_DATALIST, itemDatalists.colors);
+                    
+                    updateFilterSelect(FILTER_MARKET, itemDatalists.markets);
+                    updateFilterSelect(FILTER_ITEM_SERIES, itemDatalists.series);
+                    updateFilterSelect(FILTER_ITEM_DESCRIPTION, itemDatalists.descriptions);
+                    updateFilterSelect(FILTER_ITEM_TYPE, itemDatalists.types);
+                    updateFilterSelect(FILTER_ITEM_METAL, itemDatalists.metals);
+                    updateFilterSelect(FILTER_ITEM_MATERIAL, itemDatalists.materials);
+                    updateFilterSelect(FILTER_ITEM_COLOR, itemDatalists.colors);
+                }
+            } catch (error) {
+                console.error("Error loading datalist data:", error);
+            }
+        }
+        
+        function updateDatalist(element, values = []) {
+            element.innerHTML = '';
+            values.forEach(value => {
+                if (value) {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    element.appendChild(option);
+                }
+            });
+        }
+
+        function updateFilterSelect(element, values = []) {
+            const currentValue = element.value;
+            element.innerHTML = '<option value="">全部</option>';
+            values.forEach(value => {
+                if (value) {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value;
+                    element.appendChild(option);
+                }
+            });
+            if (currentValue && element.querySelector(`option[value="${currentValue}"]`)) {
+                element.value = currentValue;
+            }
+        }
+
+        async function saveNewUniqueValues(transaction) {
+            const newValues = {
+                markets: new Set(itemDatalists.markets || []),
+                series: new Set(itemDatalists.series || []),
+                descriptions: new Set(itemDatalists.descriptions || []),
+                types: new Set(itemDatalists.types || []),
+                metals: new Set(itemDatalists.metals || []),
+                materials: new Set(itemDatalists.materials || []),
+                colors: new Set(itemDatalists.colors || []),
+            };
+
+            if (transaction.marketName) newValues.markets.add(transaction.marketName);
+            
+            transaction.items.forEach(item => {
+                if (item.series) newValues.series.add(item.series);
+                if (item.description) newValues.descriptions.add(item.description);
+                if (item.type) newValues.types.add(item.type);
+                if (item.metal) newValues.metals.add(item.metal);
+                if (item.material) newValues.materials.add(item.material);
+                if (item.color) newValues.colors.add(item.color);
+            });
+
+            const updatedDatalists = {
+                markets: Array.from(newValues.markets).sort(),
+                series: Array.from(newValues.series).sort(),
+                descriptions: Array.from(newValues.descriptions).sort(),
+                types: Array.from(newValues.types).sort(),
+                metals: Array.from(newValues.metals).sort(),
+                materials: Array.from(newValues.materials).sort(),
+                colors: Array.from(newValues.colors).sort(),
+            };
+
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'datalists', 'unique_values');
+            await setDoc(docRef, updatedDatalists, { merge: true });
+            
+            itemDatalists = updatedDatalists;
+            loadDatalistData(); 
+        }
+
+        // --- Rendering and Filter Functions ---
+
+        function renderTransactionItems(items) {
+            return items.map(item => {
+                const itemPrice = (item.unitPrice || 0) * (1 - (item.discountPercent || 0) / 100);
+                return `
+                    <li class="text-sm border-b pb-1 mb-1 last:border-b-0 last:pb-0 text-gray-600">
+                        <span class="font-semibold text-gray-800">${item.series || 'N/A'} | ${item.description || 'N/A'}</span>
+                        <span class="text-xs text-gray-500"> (${item.metal || 'N/A'}, ${item.material || 'N/A'}, ${item.color || 'N/A'})</span>
+                        <div class="flex justify-between items-center text-xs mt-1">
+                            <span>單價: ${formatCurrency(item.unitPrice)} | 折扣: ${item.discountPercent}%</span>
+                            <span class="font-bold text-indigo-600">${formatCurrency(itemPrice)} HKD</span>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function renderSalesData() {
+            const marketFilter = FILTER_MARKET.value;
+            const typeFilter = FILTER_TYPE.value;
+            const originFilter = FILTER_ORIGIN.value;
+            const startDateFilter = FILTER_START_DATE.value ? new Date(FILTER_START_DATE.value) : null;
+            const endDateFilter = FILTER_END_DATE.value ? new Date(FILTER_END_DATE.value) : null;
+
+            const itemSeriesFilter = FILTER_ITEM_SERIES.value;
+            const itemDescriptionFilter = FILTER_ITEM_DESCRIPTION.value;
+            const itemTypeFilter = FILTER_ITEM_TYPE.value;
+            const itemMetalFilter = FILTER_ITEM_METAL.value;
+            const itemMaterialFilter = FILTER_ITEM_MATERIAL.value;
+            const itemColorFilter = FILTER_ITEM_COLOR.value;
+
+            const filteredTransactions = transactionsData.filter(transaction => {
+                if (marketFilter && transaction.marketName !== marketFilter) return false;
+                if (typeFilter && transaction.customerType !== typeFilter) return false;
+                if (originFilter && transaction.customerOrigin !== originFilter) return false;
+
+                if (startDateFilter || endDateFilter) {
+                    const transactionDate = transaction.timestamp.toDate ? transaction.timestamp.toDate() : new Date(transaction.timestamp);
+                    const inclusiveEndDate = endDateFilter ? new Date(endDateFilter.getTime() + 86400000) : null; 
+                    
+                    if (startDateFilter && transactionDate < startDateFilter) return false;
+                    if (inclusiveEndDate && transactionDate >= inclusiveEndDate) return false;
+                }
+                
+                if (itemSeriesFilter || itemDescriptionFilter || itemTypeFilter || itemMetalFilter || itemMaterialFilter || itemColorFilter) {
+                    const itemsMatch = transaction.items.some(item => {
+                        let seriesMatch = !itemSeriesFilter || item.series === itemSeriesFilter;
+                        let descriptionMatch = !itemDescriptionFilter || item.description === itemDescriptionFilter;
+                        let typeMatch = !itemTypeFilter || item.type === itemTypeFilter;
+                        let metalMatch = !itemMetalFilter || item.metal === itemMetalFilter;
+                        let materialMatch = !itemMaterialFilter || item.material === itemMaterialFilter;
+                        let colorMatch = !itemColorFilter || item.color === itemColorFilter;
+                        
+                        return seriesMatch && descriptionMatch && typeMatch && metalMatch && materialMatch && colorMatch;
+                    });
+                    if (!itemsMatch) return false;
+                }
+
+                return true;
+            });
+
+            const transactionCount = filteredTransactions.length;
+            const totalSales = filteredTransactions.reduce((sum, t) => sum + (parseFloat(t.calculatedTotal) || 0), 0);
+            
+            TRANSACTION_COUNT_DISPLAY.textContent = transactionCount;
+            TOTAL_SALES_AMOUNT_DISPLAY.textContent = `${formatCurrency(totalSales)} HKD`;
+
+            updatePieChart(filteredTransactions, totalSales);
+
+            TRANSACTIONS_LIST.innerHTML = '';
+            if (filteredTransactions.length === 0) {
+                TRANSACTIONS_LIST.innerHTML = `<p class="text-center text-gray-500 p-4 bg-gray-50 rounded-lg">沒有找到符合篩選條件的交易記錄。</p>`;
+                return;
+            }
+
+            filteredTransactions.forEach(t => {
+                const transactionElement = document.createElement('div');
+                transactionElement.className = `p-4 rounded-xl shadow-md border ${t.customerType === '新客' ? 'bg-new-customer/10 border-new-customer/50' : 'bg-returning-customer/10 border-returning-customer/50'}`;
+                transactionElement.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <p class="text-lg font-bold ${t.customerType === '新客' ? 'text-new-customer' : 'text-returning-customer'}">
+                                ${t.calculatedTotal ? formatCurrency(t.calculatedTotal) : 'N/A'} HKD
+                            </p>
+                            <p class="text-sm text-gray-600">${t.customerName || '匿名'} (${t.customerType} | ${t.customerOrigin})</p>
+                            <p class="text-xs text-gray-500 mt-1">市集: ${t.marketName || '未填寫'} | 付款: ${t.paymentMethod}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="text-blue-600 hover:text-blue-800 font-semibold" onclick="openEditModal('${t.id}')">
+                                編輯
+                            </button>
+                            <button class="text-red-600 hover:text-red-800 font-semibold" onclick="deleteTransaction('${t.id}')">
+                                刪除
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2 border-t pt-2">特徵: ${t.customerTrait || '無'} | 記錄: ${formatDate(t.timestamp)}</p>
+                    <ul class="list-none pl-0 mt-2">
+                        ${renderTransactionItems(t.items)}
+                    </ul>
+                `;
+                TRANSACTIONS_LIST.appendChild(transactionElement);
+            });
+            
+            if (transactionsData.length > 0) {
+                lastMarketName = transactionsData[0].marketName || '';
+                MARKET_NAME_INPUT.placeholder = lastMarketName ? `上次使用: ${lastMarketName}` : '例如：西九龍市集';
+            }
+        }
+
+        function updatePieChart(filteredTransactions, totalSales) {
+            const customerSales = {
+                '新客': 0,
+                '熟客': 0,
+            };
+
+            filteredTransactions.forEach(t => {
+                const type = t.customerType || '新客'; 
+                customerSales[type] = (customerSales[type] || 0) + (parseFloat(t.calculatedTotal) || 0);
+            });
+
+            const salesNew = customerSales['新客'];
+            const salesReturning = customerSales['熟客'];
+            
+            if (totalSales === 0) {
+                CHART_STATUS.textContent = "沒有足夠數據或總銷售額為零。";
+                if (pieChart) pieChart.destroy();
+                pieChart = null;
+                return;
+            }
+
+            CHART_STATUS.textContent = `總銷售額: ${formatCurrency(totalSales)} HKD (按篩選條件計算)`;
+
+            const dataPoints = [salesNew, salesReturning];
+            
+            const labelsWithAmount = [
+                `新客 (${formatCurrency(salesNew)} HKD)`, 
+                `熟客 (${formatCurrency(salesReturning)} HKD)`
+            ];
+
+            const data = {
+                labels: labelsWithAmount,
+                datasets: [{
+                    data: dataPoints,
+                    backgroundColor: [
+                        '#10b981', // new-customer
+                        '#3b82f6', // returning-customer
+                    ],
+                    hoverOffset: 4
+                }]
+            };
+
+            const config = {
+                type: 'pie',
+                data: data,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    family: 'Inter, Noto Sans TC, sans-serif'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += formatCurrency(context.parsed) + ' HKD';
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            if (pieChart) {
+                pieChart.data = data;
+                pieChart.update();
+            } else {
+                pieChart = new Chart(SALES_PIE_CHART_CONTEXT, config);
+            }
+        }
+
+        // --- CRUD Functions ---
+
+        // DELETE Transaction
+        window.deleteTransaction = async (id) => {
+            // NOTE: For a production app, you MUST implement a custom modal UI 
+            // for deletion confirmation instead of relying on native dialogs.
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'transactions', id));
+                showStatus('交易記錄已刪除。', false);
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+                showStatus('刪除交易失敗。', true);
+            }
+        };
+
+        // EDIT Modal Functions
+        window.openEditModal = async (id) => {
+            const transaction = transactionsData.find(t => t.id === id);
+            if (!transaction) {
+                showStatus('找不到該筆交易記錄。', true);
+                return;
+            }
+
+            // Set all edit fields
+            document.getElementById('edit-transaction-id').value = id;
+            document.getElementById('edit-market-name').value = transaction.marketName || '';
+            document.getElementById('edit-customer-name').value = transaction.customerName || '';
+            document.getElementById('edit-customer-trait').value = transaction.customerTrait || '';
+            document.getElementById('edit-customer-type').value = transaction.customerType || '新客';
+            document.getElementById('edit-customer-origin').value = transaction.customerOrigin || '本地客人';
+            document.getElementById('edit-manual-discount').value = transaction.manualDiscount || '0';
+            document.getElementById('edit-payment-method').value = transaction.paymentMethod || '現金';
+
+            // Load Items for Editing
+            EDIT_ITEMS_CONTAINER.innerHTML = '';
+            transaction.items.forEach((item, index) => {
+                item.tempId = `edit-${index}`; 
+                createItemCard(item, EDIT_ITEMS_CONTAINER, true);
+            });
+            
+            // **CRITICAL FIX:** Ensure initial calculation for the modal display is run 
+            // after all item cards are rendered.
+            calculateGrandTotal(EDIT_ITEMS_CONTAINER); 
+
+            EDIT_MODAL.style.display = 'flex';
+        };
+
+        window.closeEditModal = () => {
+            EDIT_MODAL.style.display = 'none';
+        };
+        
+        // Helper to add a new item card (used by both main form and edit modal)
+        function addNewItem(container, isEdit = false) {
+            createItemCard({}, container, isEdit);
+            // Recalculate the total price when a new item is added
+            calculateGrandTotal(container); 
+        }
+
+        // 6. Main Form Submission Handler
+        FORM.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!userId) {
+                showStatus('應用程式未初始化或未認證。請稍後再試。', true);
+                return;
+            }
+
+            const items = [];
+            let isValid = true;
+            const itemCards = ITEMS_CONTAINER.querySelectorAll('.item-card');
+
+            if (itemCards.length === 0) {
+                showStatus('請至少新增一個商品。', true);
+                return;
+            }
+
+            itemCards.forEach(card => {
+                const unitPrice = parseFloat(card.querySelector('.item-unit-price').value) || 0;
+                const discountPercent = parseFloat(card.querySelector('.item-discount-percent').value) || 0;
+                const itemTotalPrice = parseFloat(card.querySelector('.item-price-calculated').value) || 0;
+
+                if (unitPrice < 0 || discountPercent < 0) {
+                    isValid = false;
+                    return;
+                }
+
+                items.push({
+                    series: card.querySelector('.item-series').value.trim(),
+                    description: card.querySelector('.item-description').value.trim(),
+                    type: card.querySelector('.item-type').value.trim(),
+                    metal: card.querySelector('.item-metal').value.trim(),
+                    material: card.querySelector('.item-material').value.trim(),
+                    color: card.querySelector('.item-color').value.trim(),
+                    unitPrice: unitPrice,
+                    discountPercent: discountPercent,
+                    itemTotalPrice: itemTotalPrice,
+                });
+            });
+
+            if (!isValid) {
+                showStatus('單價或折扣不能為負數。', true);
+                return;
+            }
+
+            const transactionData = {
+                marketName: MARKET_NAME_INPUT.value.trim() || lastMarketName,
+                customerName: CUSTOMER_NAME_INPUT.value.trim(),
+                customerTrait: CUSTOMER_TRAIT_INPUT.value.trim(),
+                customerType: CUSTOMER_TYPE_INPUT.value,
+                customerOrigin: CUSTOMER_ORIGIN_INPUT.value,
+                paymentMethod: PAYMENT_METHOD_INPUT.value,
+                manualDiscount: parseFloat(MANUAL_DISCOUNT.value) || 0,
+                calculatedTotal: parseFloat(CALCULATED_TOTAL.value) || 0,
+                items: items,
+                timestamp: new Date(),
+            };
+
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'transactions'), transactionData);
+                
+                saveNewUniqueValues(transactionData); 
+                
+                showStatus('交易記錄成功！', false);
+                FORM.reset();
+                ITEMS_CONTAINER.innerHTML = ''; 
+                addNewItem(ITEMS_CONTAINER); 
+                MANUAL_DISCOUNT.value = 0; 
+                calculateGrandTotal(ITEMS_CONTAINER); 
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showStatus('記錄銷售失敗。', true);
+            }
+        });
+
+        // 7. Edit Form Submission Handler
+        EDIT_FORM.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const id = EDIT_TRANSACTION_ID.value;
+            const items = [];
+            let isValid = true;
+            const itemCards = EDIT_ITEMS_CONTAINer.querySelectorAll('.item-card');
+
+            itemCards.forEach(card => {
+                const unitPrice = parseFloat(card.querySelector('.item-unit-price').value) || 0;
+                const discountPercent = parseFloat(card.querySelector('.item-discount-percent').value) || 0;
+                const itemTotalPrice = parseFloat(card.querySelector('.item-price-calculated').value) || 0;
+
+                if (unitPrice < 0 || discountPercent < 0) {
+                    isValid = false;
+                    return;
+                }
+
+                items.push({
+                    series: card.querySelector('.item-series').value.trim(),
+                    description: card.querySelector('.item-description').value.trim(),
+                    type: card.querySelector('.item-type').value.trim(),
+                    metal: card.querySelector('.item-metal').value.trim(),
+                    material: card.querySelector('.item-material').value.trim(),
+                    color: card.querySelector('.item-color').value.trim(),
+                    unitPrice: unitPrice,
+                    discountPercent: discountPercent,
+                    itemTotalPrice: itemTotalPrice,
+                });
+            });
+            
+            if (!isValid) {
+                showStatus('單價或折扣不能為負數。', true);
+                return;
+            }
+            
+            const updatedData = {
+                marketName: document.getElementById('edit-market-name').value.trim(),
+                customerName: document.getElementById('edit-customer-name').value.trim(),
+                customerTrait: document.getElementById('edit-customer-trait').value.trim(),
+                customerType: document.getElementById('edit-customer-type').value,
+                customerOrigin: document.getElementById('edit-customer-origin').value,
+                paymentMethod: document.getElementById('edit-payment-method').value,
+                manualDiscount: parseFloat(document.getElementById('edit-manual-discount').value) || 0,
+                calculatedTotal: parseFloat(document.getElementById('edit-calculated-total').value) || 0,
+                items: items,
+            };
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'transactions', id);
+                await updateDoc(docRef, updatedData);
+                
+                saveNewUniqueValues(updatedData);
+
+                showStatus('交易記錄已更新！', false);
+                closeEditModal();
+            } catch (e) {
+                console.error("Error updating document: ", e);
+                showStatus('更新交易失敗。', true);
+            }
+        });
+
+
+        // --- Event Listeners and Initialization ---
+
+        // Listeners for manual discount and adding items
+        MANUAL_DISCOUNT.addEventListener('input', () => calculateGrandTotal(ITEMS_CONTAINER));
+        ADD_ITEM_BTN.addEventListener('click', () => addNewItem(ITEMS_CONTAINER, false));
+        EDIT_ADD_ITEM_BTN.addEventListener('click', () => addNewItem(EDIT_ITEMS_CONTAINER, true));
+        EDIT_MANUAL_DISCOUNT.addEventListener('input', () => calculateGrandTotal(EDIT_ITEMS_CONTAINER));
+        
+        // Initial item card on load
+        addNewItem(ITEMS_CONTAINER, false); 
+        
+        // Filter change listener
+        const filterControls = [
+            FILTER_MARKET, FILTER_TYPE, FILTER_ORIGIN, FILTER_START_DATE, FILTER_END_DATE,
+            FILTER_ITEM_SERIES, FILTER_ITEM_DESCRIPTION, FILTER_ITEM_TYPE, FILTER_ITEM_METAL, FILTER_ITEM_MATERIAL, FILTER_ITEM_COLOR
+        ];
+
+        const handleFilterChange = () => renderSalesData();
+
+        filterControls.forEach(control => {
+            control.addEventListener('change', handleFilterChange);
+        });
+
+        CLEAR_FILTERS_BUTTON.addEventListener('click', () => {
+            filterControls.forEach(control => {
+                control.value = ''; 
+            });
+            handleFilterChange(); 
+        });
+
+
+        // 8. Real-time Data Listener (Firestore)
+        function startRealtimeListener() {
+            const q = collection(db, 'artifacts', appId, 'users', userId, 'transactions'); 
+            
+            onSnapshot(q, (snapshot) => {
+                const transactions = [];
+                snapshot.forEach((doc) => {
+                    transactions.push({ id: doc.id, ...doc.data() });
+                });
+                
+                transactions.sort((a, b) => {
+                    const timeA = a.timestamp.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
+                    const timeB = b.timestamp.toDate ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
+                    return timeB - timeA;
+                });
+                
+                transactionsData = transactions;
+                
+                renderSalesData();
+                loadDatalistData();
+
+                showStatus(`已從數據庫載入 ${transactionsData.length} 筆交易記錄。`, false);
+            }, (error) => {
+                console.error("Firestore real-time listener failed:", error);
+                showStatus('無法從數據庫載入實時數據。', true);
+            });
+        }
+
+        // 9. Application Initialization
+        function getFirebaseConfig() {
+            try {
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    return JSON.parse(__firebase_config);
+                }
+                console.error("Firebase config not found. Using safe fallback.");
+                return null; 
+            } catch (e) {
+                console.error("Error parsing Firebase config:", e);
+                return null;
+            }
+        }
+
+        async function initApp() {
+            const firebaseConfig = getFirebaseConfig();
+
+            if (!firebaseConfig) {
+                showStatus('錯誤：Firebase 設定檔遺失。應用程式無法啟動。', true);
+                return;
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        showStatus('身份驗證成功，正在載入數據...', false);
+                        startRealtimeListener(); 
+                    } else {
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (e) {
+                            console.error("Authentication failed:", e);
+                            showStatus('身份驗證失敗，無法連接到數據庫。', true);
+                        }
+                    }
+                });
+
+            } catch (e) {
+                console.error("Application initialization failed:", e);
+                showStatus(`應用程式啟動失敗：${e.message}`, true);
+            }
+        }
+
+        initApp();
+
+    </script>
+<p style="bottom: 10px; right: 10px; position: absolute;"><a href="https://wordtohtml.net/?utm_source=wth_free_doc_conversion_link&utm_medium=external" target="_blank" style="font-size:11px; color: #d0d0d0">Converted to HTML with WordToHTML.net</a><span style="font-size:11px; color: #d0d0d0"> | </span><a href="https://documentconverter.pro/?utm_source=wth_free_doc_conversion_link&utm_medium=external" target="_blank" style="font-size:11px; color: #d0d0d0">Document Converter for Windows</a></p>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"4581d6a58cf94e929fad52deda295622","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
